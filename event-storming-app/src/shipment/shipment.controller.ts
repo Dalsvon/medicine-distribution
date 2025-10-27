@@ -11,6 +11,7 @@ import {
 import { ShipmentService } from './shipment.service';
 import * as Commands from './commands/shipment.commands';
 import * as Dto from './dto/shipment.dtos';
+import { NotFoundException } from '@nestjs/common';
 
 @Controller('shipments')
 export class ShipmentController {
@@ -19,9 +20,13 @@ export class ShipmentController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   createShipment(@Body() dto: Dto.CreateShipmentDto) {
-    const command = new Commands.CreateShipment(dto.orderId, dto.destination);
-    const shipmentId = this.shipmentService.createShipment(command);
-    return { shipmentId };
+    try {
+      const command = new Commands.CreateShipment(dto.orderId, dto.destination);
+      const shipmentId = this.shipmentService.createShipment(command);
+      return { shipmentId };
+    } catch (error) {
+      return { statusCode: HttpStatus.BAD_REQUEST, message: error.message };
+    }
   }
 
   @Post(':id/medicines')
@@ -30,14 +35,21 @@ export class ShipmentController {
     @Param('id') shipmentId: string,
     @Body() dto: Dto.PackMedicineDto,
   ) {
-    const command = new Commands.PackMedicineForShipment(
-      shipmentId,
-      dto.medicineId,
-      dto.medicineName,
-      dto.quantity,
-    );
-    this.shipmentService.packMedicine(command);
-    return { message: 'Medicine packed successfully' };
+    try {
+      const command = new Commands.PackMedicineForShipment(
+        shipmentId,
+        dto.medicineId,
+        dto.medicineName,
+        dto.quantity,
+      );
+      this.shipmentService.packMedicine(command);
+      return { message: 'Medicine packed successfully' };
+    } catch (error) {
+      return {
+        statusCode: error instanceof NotFoundException ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST,
+        message: error.message,
+      };
+    }
   }
 
   @Post(':id/dispatch')
@@ -46,13 +58,20 @@ export class ShipmentController {
     @Param('id') shipmentId: string,
     @Body() dto: Dto.DispatchShipmentDto,
   ) {
-    const command = new Commands.DispatchShipment(
-      shipmentId,
-      dto.carrier,
-      dto.trackingNumber,
-    );
-    this.shipmentService.dispatchShipment(command);
-    return { message: 'Shipment dispatched successfully' };
+    try {
+      const command = new Commands.DispatchShipment(
+        shipmentId,
+        dto.carrier,
+        dto.trackingNumber,
+      );
+      this.shipmentService.dispatchShipment(command);
+      return { message: 'Shipment dispatched successfully' };
+    } catch (error) {
+      return {
+        statusCode: error instanceof NotFoundException ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST,
+        message: error.message,
+      };
+    }
   }
 
   @Put(':id/tracking')
@@ -61,13 +80,20 @@ export class ShipmentController {
     @Param('id') shipmentId: string,
     @Body() dto: Dto.UpdateTrackingDto,
   ) {
-    const command = new Commands.UpdateShipmentTracking(
-      shipmentId,
-      dto.location,
-      dto.status,
-    );
-    this.shipmentService.updateTracking(command);
-    return { message: 'Tracking updated successfully' };
+    try {
+      const command = new Commands.UpdateShipmentTracking(
+        shipmentId,
+        dto.location,
+        dto.status,
+      );
+      this.shipmentService.updateTracking(command);
+      return { message: 'Tracking updated successfully' };
+    } catch (error) {
+      return {
+        statusCode: error instanceof NotFoundException ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST,
+        message: error.message,
+      };
+    }
   }
 
   @Post(':id/delivery/confirm')
@@ -76,12 +102,19 @@ export class ShipmentController {
     @Param('id') shipmentId: string,
     @Body() dto: Dto.ConfirmDeliveryDto,
   ) {
-    const command = new Commands.ConfirmDelivery(
-      shipmentId,
-      dto.recipientName,
-    );
-    this.shipmentService.confirmDelivery(command);
-    return { message: 'Delivery confirmed successfully' };
+    try {
+      const command = new Commands.ConfirmDelivery(
+        shipmentId,
+        dto.recipientName,
+      );
+      this.shipmentService.confirmDelivery(command);
+      return { message: 'Delivery confirmed successfully' };
+    } catch (error) {
+      return {
+        statusCode: error instanceof NotFoundException ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST,
+        message: error.message,
+      };
+    }
   }
 
   @Post(':id/delivery/fail')
@@ -90,31 +123,66 @@ export class ShipmentController {
     @Param('id') shipmentId: string,
     @Body() dto: Dto.ReportFailureDto,
   ) {
-    const command = new Commands.ReportDeliveryFailure(
-      shipmentId,
-      dto.reason,
-    );
-    this.shipmentService.reportDeliveryFailure(command);
-    return { message: 'Delivery failure reported' };
+    try {
+      const command = new Commands.ReportDeliveryFailure(
+        shipmentId,
+        dto.reason,
+      );
+      this.shipmentService.reportDeliveryFailure(command);
+      return { message: 'Delivery failure reported' };
+    } catch (error) {
+      return {
+        statusCode: error instanceof NotFoundException ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST,
+        message: error.message,
+      };
+    }
   }
 
   @Get(':id')
   getShipment(@Param('id') id: string) {
-    return this.shipmentService.getShipment(id);
+    try {
+      return this.shipmentService.getShipment(id);
+    } catch (error) {
+      return {
+        statusCode: error instanceof NotFoundException ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST,
+        message: error.message,
+      };
+    }
   }
 
   @Get()
   getAllShipments() {
-    return this.shipmentService.getAllShipments();
+    try {
+      return this.shipmentService.getAllShipments();
+    } catch (error) {
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: error.message,
+      };
+    }
   }
 
   @Get(':id/events')
   getShipmentEvents(@Param('id') id: string) {
-    return this.shipmentService.getShipmentEvents(id);
+    try {
+      return this.shipmentService.getShipmentEvents(id);
+    } catch (error) {
+      return {
+        statusCode: error instanceof NotFoundException ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST,
+        message: error.message,
+      };
+    }
   }
 
   @Get('events/all')
   getAllEvents() {
-    return this.shipmentService.getAllEvents();
+    try {
+      return this.shipmentService.getAllEvents();
+    } catch (error) {
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: error.message,
+      };
+    }
   }
 }
