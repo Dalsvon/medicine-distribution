@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ShipmentRepository } from './shipment.repository';
 import { EventStore } from './events/event-store';
-import { Shipment, ShipmentStatus } from './shipment.aggregate';
+import { Shipment } from './shipment.aggregate';
 import * as Commands from './commands/shipment.commands';
 import * as Events from './events/shipment.events';
 
@@ -12,7 +12,7 @@ export class ShipmentService {
     private readonly eventStore: EventStore,
   ) {}
 
-  createShipment(command: Commands.CreateShipment): string {
+  async createShipment(command: Commands.CreateShipment): Promise<string> {
     const shipmentId = this.repository.generateId();
     const shipment = new Shipment(
       shipmentId,
@@ -20,7 +20,7 @@ export class ShipmentService {
       command.destination,
     );
 
-    this.repository.save(shipment);
+    await this.repository.save(shipment);
 
     const event = new Events.ShipmentCreated(
       shipmentId,
@@ -28,13 +28,13 @@ export class ShipmentService {
       command.destination,
       new Date(),
     );
-    this.eventStore.append(shipmentId, 'ShipmentCreated', event);
+    await this.eventStore.append(shipmentId, 'ShipmentCreated', event);
 
     return shipmentId;
   }
 
-  packMedicine(command: Commands.PackMedicineForShipment): void {
-    const shipment = this.repository.findById(command.shipmentId);
+  async packMedicine(command: Commands.PackMedicineForShipment): Promise<void> {
+    const shipment = await this.repository.findById(command.shipmentId);
     if (!shipment) {
       throw new NotFoundException(
         `Shipment ${command.shipmentId} not found`,
@@ -46,7 +46,7 @@ export class ShipmentService {
       command.medicineName,
       command.quantity,
     );
-    this.repository.save(shipment);
+    await this.repository.save(shipment);
 
     const event = new Events.MedicinePackedForShipment(
       command.shipmentId,
@@ -55,35 +55,31 @@ export class ShipmentService {
       command.quantity,
       new Date(),
     );
-    this.eventStore.append(command.shipmentId, 'MedicinePackedForShipment', event);
+    await this.eventStore.append(command.shipmentId, 'MedicinePackedForShipment', event);
   }
 
-dispatchShipment(command: Commands.DispatchShipment): void {
-  const shipment = this.repository.findById(command.shipmentId);
-  if (!shipment) {
-    throw new NotFoundException(
-      `Shipment ${command.shipmentId} not found`,
+  async dispatchShipment(command: Commands.DispatchShipment): Promise<void> {
+    const shipment = await this.repository.findById(command.shipmentId);
+    if (!shipment) {
+      throw new NotFoundException(
+        `Shipment ${command.shipmentId} not found`,
+      );
+    }
+
+    shipment.dispatch(command.carrier, command.trackingNumber);
+    await this.repository.save(shipment);
+
+    const event = new Events.ShipmentDispatched(
+      command.shipmentId,
+      command.carrier,
+      command.trackingNumber,
+      new Date(),
     );
+    await this.eventStore.append(command.shipmentId, 'ShipmentDispatched', event);
   }
 
-  if (shipment.medicines.length === 0) {
-    throw new Error(`Cannot dispatch shipment ${command.shipmentId} without packed medicines`);
-  }
-
-  shipment.dispatch(command.carrier, command.trackingNumber);
-  this.repository.save(shipment);
-
-  const event = new Events.ShipmentDispatched(
-    command.shipmentId,
-    command.carrier,
-    command.trackingNumber,
-    new Date(),
-  );
-  this.eventStore.append(command.shipmentId, 'ShipmentDispatched', event);
-}
-
-  updateTracking(command: Commands.UpdateShipmentTracking): void {
-    const shipment = this.repository.findById(command.shipmentId);
+  async updateTracking(command: Commands.UpdateShipmentTracking): Promise<void> {
+    const shipment = await this.repository.findById(command.shipmentId);
     if (!shipment) {
       throw new NotFoundException(
         `Shipment ${command.shipmentId} not found`,
@@ -91,7 +87,7 @@ dispatchShipment(command: Commands.DispatchShipment): void {
     }
 
     shipment.updateTracking(command.location, command.status);
-    this.repository.save(shipment);
+    await this.repository.save(shipment);
 
     const event = new Events.ShipmentTrackingUpdated(
       command.shipmentId,
@@ -99,34 +95,30 @@ dispatchShipment(command: Commands.DispatchShipment): void {
       command.status,
       new Date(),
     );
-    this.eventStore.append(command.shipmentId, 'ShipmentTrackingUpdated', event);
+    await this.eventStore.append(command.shipmentId, 'ShipmentTrackingUpdated', event);
   }
 
-confirmDelivery(command: Commands.ConfirmDelivery): void {
-  const shipment = this.repository.findById(command.shipmentId);
-  if (!shipment) {
-    throw new NotFoundException(
-      `Shipment ${command.shipmentId} not found`,
+  async confirmDelivery(command: Commands.ConfirmDelivery): Promise<void> {
+    const shipment = await this.repository.findById(command.shipmentId);
+    if (!shipment) {
+      throw new NotFoundException(
+        `Shipment ${command.shipmentId} not found`,
+      );
+    }
+
+    shipment.confirmDelivery(command.recipientName);
+    await this.repository.save(shipment);
+
+    const event = new Events.ShipmentDelivered(
+      command.shipmentId,
+      command.recipientName,
+      new Date(),
     );
+    await this.eventStore.append(command.shipmentId, 'ShipmentDelivered', event);
   }
 
-  if (shipment.status !== ShipmentStatus.DISPATCHED && shipment.status !== ShipmentStatus.IN_TRANSIT) {
-    throw new Error(`Cannot confirm delivery for shipment ${command.shipmentId} that has not been dispatched`);
-  }
-
-  shipment.confirmDelivery(command.recipientName);
-  this.repository.save(shipment);
-
-  const event = new Events.ShipmentDelivered(
-    command.shipmentId,
-    command.recipientName,
-    new Date(),
-  );
-  this.eventStore.append(command.shipmentId, 'ShipmentDelivered', event);
-}
-
-  reportDeliveryFailure(command: Commands.ReportDeliveryFailure): void {
-    const shipment = this.repository.findById(command.shipmentId);
+  async reportDeliveryFailure(command: Commands.ReportDeliveryFailure): Promise<void> {
+    const shipment = await this.repository.findById(command.shipmentId);
     if (!shipment) {
       throw new NotFoundException(
         `Shipment ${command.shipmentId} not found`,
@@ -134,33 +126,33 @@ confirmDelivery(command: Commands.ConfirmDelivery): void {
     }
 
     shipment.reportFailure(command.reason);
-    this.repository.save(shipment);
+    await this.repository.save(shipment);
 
     const event = new Events.ShipmentDeliveryFailed(
       command.shipmentId,
       command.reason,
       new Date(),
     );
-    this.eventStore.append(command.shipmentId, 'ShipmentDeliveryFailed', event);
+    await this.eventStore.append(command.shipmentId, 'ShipmentDeliveryFailed', event);
   }
 
-  getShipment(id: string): Shipment {
-    const shipment = this.repository.findById(id);
+  async getShipment(id: string): Promise<Shipment> {
+    const shipment = await this.repository.findById(id);
     if (!shipment) {
       throw new NotFoundException(`Shipment ${id} not found`);
     }
     return shipment;
   }
 
-  getAllShipments(): Shipment[] {
+  async getAllShipments(): Promise<Shipment[]> {
     return this.repository.findAll();
   }
 
-  getShipmentEvents(id: string) {
+  async getShipmentEvents(id: string) {
     return this.eventStore.getEventsByAggregateId(id);
   }
 
-  getAllEvents() {
+  async getAllEvents() {
     return this.eventStore.getAllEvents();
   }
 }

@@ -1,4 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { EventEntity } from './event.entity';
 
 export interface StoredEvent {
   eventId: string;
@@ -10,25 +13,35 @@ export interface StoredEvent {
 
 @Injectable()
 export class EventStore {
-  private events: StoredEvent[] = [];
+  constructor(
+    @InjectRepository(EventEntity)
+    private readonly repository: Repository<EventEntity>,
+  ) {}
 
-  append(aggregateId: string, eventType: string, eventData: any): void {
-    const event: StoredEvent = {
-      eventId: this.generateId(),
-      aggregateId,
-      eventType,
-      eventData,
-      timestamp: new Date(),
-    };
-    this.events.push(event);
+  async append(aggregateId: string, eventType: string, eventData: any): Promise<void> {
+    const event = new EventEntity();
+    event.eventId = this.generateId();
+    event.aggregateId = aggregateId;
+    event.eventType = eventType;
+    event.eventData = eventData;
+    event.timestamp = new Date();
+    
+    await this.repository.save(event);
   }
 
-  getEventsByAggregateId(aggregateId: string): StoredEvent[] {
-    return this.events.filter((event) => event.aggregateId === aggregateId);
+  async getEventsByAggregateId(aggregateId: string): Promise<StoredEvent[]> {
+    const events = await this.repository.find({
+      where: { aggregateId },
+      order: { timestamp: 'ASC' },
+    });
+    return events;
   }
 
-  getAllEvents(): StoredEvent[] {
-    return [...this.events];
+  async getAllEvents(): Promise<StoredEvent[]> {
+    const events = await this.repository.find({
+      order: { timestamp: 'ASC' },
+    });
+    return events;
   }
 
   private generateId(): string {
